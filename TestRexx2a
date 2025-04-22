@@ -1,0 +1,86 @@
+is that possible to code jcl and rexx using chatgpt to export ibm tso sdsf da queue to a file?
+
+Yes, it's absolutely possible to use JCL and REXX, with help from ChatGPT, to automate the export of the SDSF DA queue (Display Active jobs) on IBM z/OS (TSO) to a dataset or file.
+
+Here's how it works at a high level:
+
+
+---
+
+1. What you need to do
+
+Use REXX to interact with SDSF panels (SDSF API via ISFEXEC).
+
+Use JCL to run the REXX script in batch.
+
+Capture the SDSF DA panel output (the list of active jobs).
+
+Write that output to a dataset.
+
+
+
+---
+
+2. REXX Code Example
+
+This REXX example will access SDSF's DA panel and write the job list to a dataset:
+
+/* REXX */
+ADDRESS TSO
+"ISFEXEC DA"
+
+if rc ¬= 0 then do
+  say "SDSF DA access failed with RC=" rc
+  exit 8
+end
+
+if queued() = 0 then do
+  say "No active jobs found."
+  exit 0
+end
+
+/* Open output dataset for writing */
+"ALLOCATE DD(OUTDD) DSN('YOUR.OUTPUT.DATASET') SHR REUSE"
+"EXECIO * DISKW OUTDD (STEM ISFLINE. FINIS"
+
+exit 0
+
+
+---
+
+3. JCL to Run REXX in Batch
+
+//SDSFJOB  JOB (ACCT),'REXX SDSF',CLASS=A,MSGCLASS=A
+//STEP1    EXEC PGM=IKJEFT01,DYNAMNBR=20
+//SYSPROC  DD DSN=YOUR.REXX.LIBRARY,DISP=SHR
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  %REXXNAME
+//OUTDD    DD DSN=YOUR.OUTPUT.DATASET,DISP=SHR
+
+Replace:
+
+YOUR.REXX.LIBRARY with the library containing your REXX script.
+
+REXXNAME with the name of your REXX script.
+
+YOUR.OUTPUT.DATASET with the dataset to receive the output.
+
+
+
+---
+
+4. Requirements
+
+You need access to SDSF API from REXX (ISFEXEC).
+
+The user ID running the job must have the authority to access SDSF and view the DA panel.
+
+SDSF is required to be in ISF mode, not the older HT mode.
+
+
+
+---
+
+Would you like a ready-to-copy example with all placeholders filled out, or something more specific like filtering by jobname or writing in a certain format (CSV, plain, etc.)?
+
