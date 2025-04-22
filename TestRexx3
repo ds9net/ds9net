@@ -1,0 +1,151 @@
+is that possible to save a second file with the content of JESmsgLG of each job in da queue?
+
+# Export SDSF DA Queue to CSV with Separate JESMSG Files
+
+Here's an enhanced solution that creates:
+1. A CSV file with the DA queue summary
+2. Separate files containing JESMSG content for each job
+
+## Updated JCL
+
+```jcl
+//YOURJOB  JOB (ACCT),'EXPORT SDSF DA+JESMSG',CLASS=A,MSGCLASS=X
+//STEP1    EXEC PGM=IKJEFT01
+//SYSEXEC  DD DSN=your.rexx.library,DISP=SHR
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  EXEC 'your.rexx.exec(EXPORTDAJES)'
+/*
+//OUTPUT   DD DSN=your.output.csv,DISP=(NEW,CATLG),
+//            SPACE=(TRK,(5,5)),LRECL=256,RECFM=FB,
+//            UNIT=SYSDA
+//JESMSGS  DD DSN=your.jesmsg.hlq,DISP=(NEW,CATLG),
+//            SPACE=(TRK,(10,10)),LRECL=80,RECFM=FB,
+//            UNIT=SYSDA,DSNTYPE=LIBRARY
+```
+
+## Enhanced REXX Code (EXPORTDAJES)
+
+```rexx
+/* REXX - Export SDSF DA Queue with JESMSG content */
+ADDRESS TSO
+
+/* Allocate and open SDSF */
+call SDSF "ISFEXEC ON"
+if rc ≠ 0 then do
+  say "SDSF initialization failed with RC:" rc
+  exit rc
+end
+
+/* Set SDSF options - customize columns as needed */
+columns = 'JOBNAME JOBID OWNER STATUS RETCODE STARTED ENDED CPU'
+call SDSF "ISFOWNER YOURUSERID" 
+call SDSF "ISFPREFIX *"         
+call SDSF "ISFCOLS ("columns")" 
+
+/* Access the DA panel */
+call SDSF "DA"
+if rc ≠ 0 then do
+  say "DA command failed with RC:" rc
+  exit rc
+end
+
+/* Create CSV header */
+csv_header = ''
+do i = 1 to words(columns)
+  col = word(columns, i)
+  csv_header = csv_header || '"' || col || '"'
+  if i < words(columns) then csv_header = csv_header','
+end
+"EXECIO 1 DISKW OUTPUT (STEM csv_header. FINIS"
+
+/* Process each job */
+do i = 1 to ISFULOG.0
+  jobname = ISFULOG.JOBNAME.i
+  jobid = ISFULOG.JOBID.i
+  
+  /* Create CSV line */
+  csv_line = ''
+  do j = 1 to words(columns)
+    col = word(columns, j)
+    value = value('ISFULOG.'col'.i')
+    if pos('"', value) > 0 then value = changestr('"', value, '""')
+    csv_line = csv_line || '"' || value || '"'
+    if j < words(columns) then csv_line = csv_line','
+  end
+  "EXECIO 1 DISKW OUTPUT (STEM csv_line. FINIS"
+  
+  /* Now get JESMSG for this job */
+  call SDSF "OWNER '"ISFULOG.OWNER.i"'"
+  call SDSF "PREFIX '"ISFULOG.JOBNAME.i"'"
+  call SDSF "JOBID '"ISFULOG.JOBID.i"'"
+  
+  /* Access JESMSGLG */
+  call SDSF "JESMSGLG"
+  if rc = 0 then do
+    /* Create member name for JESMSG (JOBNAME_JOBID) */
+    member = substr(jobname,1,8) || '_' || translate(jobid,'_','.')
+    
+    /* Write JESMSG content to library member */
+    "ALLOC F(JESMSG) DA('your.jesmsg.hlq("member")') NEW",
+      "SPACE(5,5) TRACKS LRECL(80) RECFM(F,B)",
+      "DSNTYPE(LIBRARY) REUSE"
+    
+    do k = 1 to ISFULOG.0
+      "EXECIO 1 DISKW JESMSG (STEM ISFULOG.LINE.k. FINIS"
+    end
+    
+    "FREE F(JESMSG)"
+  end
+  else do
+    say "No JESMSGLG available for" jobname jobid
+  end
+end
+
+/* Close SDSF */
+call SDSF "ISFEXEC OFF"
+
+say 'Successfully exported:'
+say ISFULOG.0 'jobs to CSV'
+say 'JESMSGLG content saved to your.jesmsg.hlq library'
+exit 0
+```
+
+## Key Features:
+
+1. **Dual Output**:
+   - CSV file with job summary information (same as before)
+   - PDS (library) with JESMSG content for each job
+
+2. **Member Naming**:
+   - Creates members named JOBNAME_JOBID (e.g., MYJOB1_JOB12345)
+   - Handles special characters in jobnames/IDs
+
+3. **Error Handling**:
+   - Skips jobs without JESMSG content
+   - Maintains original error checking
+
+4. **Organization**:
+   - All JESMSG outputs go to a partitioned dataset (library)
+   - Each job's messages in a separate member
+
+## Usage Notes:
+
+1. The JESMSGS DD defines a partitioned dataset (DSNTYPE=LIBRARY)
+   - Adjust the HLQ (high level qualifier) as needed
+   - Consider using generation data groups if you run this frequently
+
+2. The code:
+   - First writes the CSV summary line for the job
+   - Then extracts and saves the JESMSG content
+   - Processes all jobs in the DA queue
+
+3. You can browse the output:
+   - CSV file in any editor
+   - JESMSG members using ISPF VIEW or BROWSE
+
+4. For very large systems, you may need to:
+   - Increase space allocations
+   - Add pagination to handle thousands of jobs
+
+Would you like me to modify any aspect of this solution, such as the member naming convention or output formats?
