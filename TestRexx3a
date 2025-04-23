@@ -99,5 +99,63 @@ You may need to adjust the SPACE parameter in the ALLOCATE command based on the 
 
 This code assumes a basic SDSF configuration. You may need to adjust the SDSF commands based on your specific SDSF setup.
 
+
+change the rexx to, instead "ISPEXEC SELECT PGM(SDSF)", use "isfexec da"
+
+Here is a revised REXX sample that uses ISFEXEC DA instead of ISPEXEC SELECT PGM(SDSF), capturing the SDSF DA queue and writing it to a dataset with EXECIO:
+
+text
+/* REXX: Export SDSF DA queue to a file using ISFEXEC DA */
+rc = isfcalls('ON')
+if rc <> 0 then do
+  say 'ISFCALLS initialization failed:' rc
+  exit rc
+end
+
+/* Issue the DA command */
+address SDSF "ISFEXEC DA"
+if rc <> 0 then do
+  say 'ISFEXEC DA failed:' rc
+  exit rc
+end
+
+/* Prepare output dataset */
+outdsn = "'userid.SDSF.DAQUEUE'"  /* Replace userid with your TSO ID */
+address TSO "ALLOC FI(OUTFILE) DA("outdsn") NEW CATALOG TRACKS SPACE(1,1) LRECL(133) RECFM(FB) DSORG(PS)"
+
+/* Write each row to the output file */
+do ix = 1 to isfrows
+  line = ''
+  /* Example: output jobname and service class, add more fields as needed */
+  if symbol('JNAME.'ix,'VAR') & symbol('SRVCLASS.'ix,'VAR') then
+    line = JNAME.ix || ' ' || SRVCLASS.ix
+  else
+    line = 'Row 'ix
+  "EXECIO 1 DISKW OUTFILE (STEM line. FINIS"
+end
+
+address TSO "FREE FI(OUTFILE)"
+say 'SDSF DA queue exported to' outdsn
+exit 0
+Key changes:
+
+Uses address SDSF "ISFEXEC DA" to get the DA panel data.
+
+Loops through the isfrows stem to process each row.
+
+Writes output to a dataset allocated and cataloged in the REXX exec.
+
+Note:
+
+Replace 'userid.SDSF.DAQUEUE' with your actual TSO user ID.
+
+You can expand the fields written to the output file by referencing additional DA panel columns (e.g., JNAME.ix, SRVCLASS.ix).
+
+Ensure your JCL points to the library containing this REXX exec and invokes it with IKJEFT1B.
+
+This approach is standard for automating SDSF DA queue export via REXX and JCL.
+
+
+
 This solution combines the JCL to execute the REXX program and the REXX program to extract the SDSF DA queue output to a file, addressing the user's request comprehensively.
 
