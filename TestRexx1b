@@ -1,0 +1,122 @@
+can you format the output as csv?
+
+# CSV Formatted SDSF DA Queue Export Using JCL and REXX
+
+Here's how to modify the solution to output in CSV format:
+
+## Updated JCL (Same as Before)
+
+```jcl
+//YOURJOB  JOB (ACCT),'EXPORT SDSF DA CSV',CLASS=A,MSGCLASS=X
+//STEP1    EXEC PGM=IKJEFT01
+//SYSEXEC  DD DSN=your.rexx.library,DISP=SHR
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  EXEC 'your.rexx.exec(EXPORTDACSV)'
+/*
+//OUTPUT   DD DSN=your.output.dataset(+1),DISP=(NEW,CATLG),
+//            SPACE=(TRK,(5,5)),LRECL=256,RECFM=FB,
+//            UNIT=SYSDA
+```
+
+## Enhanced REXX Code for CSV Output (EXPORTDACSV)
+
+```rexx
+/* REXX - Export SDSF DA Queue to CSV File */
+ADDRESS TSO
+
+/* Allocate and open SDSF */
+call SDSF "ISFEXEC ON"
+if rc ≠ 0 then do
+  say "SDSF initialization failed with RC:" rc
+  exit rc
+end
+
+/* Set SDSF options - customize columns as needed */
+columns = 'JOBNAME JOBID OWNER STATUS RETCODE STARTED ENDED CPU'
+call SDSF "ISFOWNER YOURUSERID" /* Replace with your userid */
+call SDSF "ISFPREFIX *"         /* All prefixes */
+call SDSF "ISFCOLS ("columns")" /* Columns you want */
+
+/* Access the DA panel */
+call SDSF "DA"
+
+/* Check if successful */
+if rc ≠ 0 then do
+  say "DA command failed with RC:" rc
+  exit rc
+end
+
+/* Write CSV header */
+csv_header = ''
+do i = 1 to words(columns)
+  col = word(columns, i)
+  csv_header = csv_header || '"' || col || '"'
+  if i < words(columns) then csv_header = csv_header','
+end
+"EXECIO 1 DISKW OUTPUT (STEM csv_header. FINIS"
+
+/* Process each job */
+do i = 1 to ISFULOG.0
+  /* Initialize CSV line */
+  csv_line = ''
+  
+  /* Process each column */
+  do j = 1 to words(columns)
+    col = word(columns, j)
+    value = value('ISFULOG.'col'.i')
+    
+    /* Handle special characters in CSV */
+    if pos('"', value) > 0 then do
+      value = changestr('"', value, '""') /* Double quotes in CSV */
+    end
+    value = '"' || value || '"'
+    
+    /* Add to CSV line */
+    csv_line = csv_line || value
+    if j < words(columns) then csv_line = csv_line','
+  end
+  
+  /* Write CSV line */
+  "EXECIO 1 DISKW OUTPUT (STEM csv_line. FINIS"
+end
+
+/* Close SDSF */
+call SDSF "ISFEXEC OFF"
+
+say 'Successfully exported' ISFULOG.0 'jobs to CSV format'
+exit 0
+```
+
+## Key Improvements:
+
+1. **CSV Formatting**:
+   - Proper quoting of values
+   - Handling of embedded quotes by doubling them
+   - Comma-separated values
+
+2. **Column Selection**:
+   - Easily customizable column list
+   - Header row matches data columns
+
+3. **Output Dataset**:
+   - Increased LRECL to 256 to accommodate longer lines
+   - (+1) generation in dataset name for new versions
+
+4. **Error Handling**:
+   - Basic error checking remains in place
+
+## Usage Notes:
+
+1. Modify the `columns` variable in the REXX code to include all SDSF columns you need.
+
+2. Common available columns include:
+   - JOBNAME, JOBID, OWNER, STATUS, RETCODE
+   - STARTED, ENDED, CPU, DEST, QUEUE
+   - SYSNAME, SYSID, etc.
+
+3. For very large output, you may need to increase the SPACE allocation.
+
+4. To view available columns, you can check your SDSF installation's documentation or use "ISFCOLS ALL" (then examine the ISFULOG stem variables).
+
+Would you like me to add any specific columns or modify the CSV formatting further?

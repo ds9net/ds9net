@@ -1,0 +1,161 @@
+write a code jcl and rexx using execio to export ibm tso sdsf da queue to a file and catlg on the jcl to allocate the file
+
+Here's a JCL and REXX code example to export the IBM TSO SDSF DA queue to a file using EXECIO and catalog the allocated file.
+
+REXX Code (EXPORTDA.REX):
+
+text
+/* REXX program to export SDSF DA queue to a file */
+ADDRESS TSO
+
+/* Define output dataset name */
+OUTDATASET = "'userid.SDSF.DAQUEUE'"  /* Replace userid with your TSO ID */
+
+/* Allocate the output dataset */
+ALLOCATE FILE(OUTFILE) DATASET(&OUTDATASET) NEW CATALOG +
+         TRACKS SPACE(1,1,1) LRECL(133) RECFM(FB) DSORG(PS)
+
+/* Initialize variables */
+QUEUE ''  /* Ensure queue is empty */
+
+/* SDSF Commands to retrieve DA queue */
+QUEUE 'DA'  /* SDSF command to display active users */
+QUEUE 'END' /* End SDSF command input */
+
+/* Execute SDSF in batch */
+"ISPEXEC SELECT PGM(SDSF)"
+
+/* Capture SDSF output and write to dataset */
+"EXECIO * DISKR OUTFILE (STEM OUTLINE. FINIS)"
+
+/* Check for errors during EXECIO */
+IF RC ^= 0 THEN
+   DO
+      SAY 'Error writing to dataset'
+      SAY 'RC = ' RC
+      FREE FILE(OUTFILE)
+      EXIT RC
+   END
+
+/* Free the output file */
+"FREE FILE(OUTFILE)"
+
+SAY 'SDSF DA queue exported to ' OUTDATASET
+EXIT 0
+JCL Code:
+
+text
+//*-------------------------------------------------------------------
+//* JOB TO EXPORT SDSF DA QUEUE TO A FILE
+//*-------------------------------------------------------------------
+//EXPORTDA JOB (ACCT),CLASS=A,MSGCLASS=A,NOTIFY=&SYSUID
+//STEP1    EXEC PGM=IKJEFT1B
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  EXEC 'userid.REXX.LIB(EXPORTDA)'  /* Replace userid with your TSO ID */
+//SYSEXEC DD DISP=SHR,DSN=userid.REXX.LIB /* Replace with your REXX library */
+//*
+Explanation:
+
+REXX Code (EXPORTDA.REX):
+
+The REXX program starts by defining the output dataset name (OUTDATASET) and allocating the dataset using the ALLOCATE command. Make sure to replace userid with your TSO user ID.
+
+It then queues the SDSF DA command and END command to the ISPF/SDSF input queue.
+
+ISPEXEC SELECT PGM(SDSF) invokes SDSF.
+
+EXECIO reads the SDSF output from the queue and writes it to the allocated dataset. The output is stored in the OUTLINE. stem variable. EXECIO * DISKR OUTFILE (STEM OUTLINE. FINIS) reads all lines from the input queue and writes them to the dataset associated with OUTFILE.
+
+The program checks the return code from EXECIO and frees the allocated dataset.
+
+JCL Code:
+
+The JCL job executes the IKJEFT1B program, which is used to run TSO commands in batch.
+
+The SYSTSPRT DD statement defines the output for TSO messages.
+
+The SYSTSIN DD statement contains the TSO command to execute the REXX program. It executes the REXX program EXPORTDA from the userid.REXX.LIB library. Make sure to replace userid with your TSO user ID.
+
+The SYSEXEC DD statement defines the REXX library where the EXPORTDA program is stored.
+
+To run this code:
+
+Modify the REXX code to specify your desired output dataset name and your TSO user ID.
+
+Modify the JCL code to specify the correct REXX library and your TSO user ID.
+
+Submit the JCL job.
+
+This will execute the REXX program in batch, which will then export the SDSF DA queue output to the specified dataset. The dataset will be cataloged, making it available for future use.
+
+Note:
+
+Ensure that your TSO user ID has the necessary permissions to access SDSF and allocate datasets.
+
+Check the job output in the SYSTSPRT DD statement for any error messages.
+
+You may need to adjust the SPACE parameter in the ALLOCATE command based on the size of your SDSF DA queue output.
+
+This code assumes a basic SDSF configuration. You may need to adjust the SDSF commands based on your specific SDSF setup.
+
+
+change the rexx to, instead "ISPEXEC SELECT PGM(SDSF)", use "isfexec da"
+
+Here is a revised REXX sample that uses ISFEXEC DA instead of ISPEXEC SELECT PGM(SDSF), capturing the SDSF DA queue and writing it to a dataset with EXECIO:
+
+text
+/* REXX: Export SDSF DA queue to a file using ISFEXEC DA */
+rc = isfcalls('ON')
+if rc <> 0 then do
+  say 'ISFCALLS initialization failed:' rc
+  exit rc
+end
+
+/* Issue the DA command */
+address SDSF "ISFEXEC DA"
+if rc <> 0 then do
+  say 'ISFEXEC DA failed:' rc
+  exit rc
+end
+
+/* Prepare output dataset */
+outdsn = "'userid.SDSF.DAQUEUE'"  /* Replace userid with your TSO ID */
+address TSO "ALLOC FI(OUTFILE) DA("outdsn") NEW CATALOG TRACKS SPACE(1,1) LRECL(133) RECFM(FB) DSORG(PS)"
+
+/* Write each row to the output file */
+do ix = 1 to isfrows
+  line = ''
+  /* Example: output jobname and service class, add more fields as needed */
+  if symbol('JNAME.'ix,'VAR') & symbol('SRVCLASS.'ix,'VAR') then
+    line = JNAME.ix || ' ' || SRVCLASS.ix
+  else
+    line = 'Row 'ix
+  "EXECIO 1 DISKW OUTFILE (STEM line. FINIS"
+end
+
+address TSO "FREE FI(OUTFILE)"
+say 'SDSF DA queue exported to' outdsn
+exit 0
+Key changes:
+
+Uses address SDSF "ISFEXEC DA" to get the DA panel data.
+
+Loops through the isfrows stem to process each row.
+
+Writes output to a dataset allocated and cataloged in the REXX exec.
+
+Note:
+
+Replace 'userid.SDSF.DAQUEUE' with your actual TSO user ID.
+
+You can expand the fields written to the output file by referencing additional DA panel columns (e.g., JNAME.ix, SRVCLASS.ix).
+
+Ensure your JCL points to the library containing this REXX exec and invokes it with IKJEFT1B.
+
+This approach is standard for automating SDSF DA queue export via REXX and JCL.
+
+
+
+This solution combines the JCL to execute the REXX program and the REXX program to extract the SDSF DA queue output to a file, addressing the user's request comprehensively.
+

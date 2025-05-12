@@ -1,0 +1,79 @@
+is that possible to code jcl and rexx using deepseek to export ibm tso sdsf da queue to a file?
+
+# Exporting IBM TSO SDSF DA Queue to a File Using JCL and REXX with DeepSeek
+
+Yes, it's possible to use DeepSeek to help you create JCL and REXX code to export SDSF's DA (Display Active) queue to a file in TSO. Here's how you could approach this:
+
+## JCL to Run the REXX Exec
+
+```jcl
+//YOURJOB  JOB (ACCT),'EXPORT SDSF DA',CLASS=A,MSGCLASS=X
+//STEP1    EXEC PGM=IKJEFT01
+//SYSEXEC  DD DSN=your.rexx.library,DISP=SHR
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  EXEC 'your.rexx.exec(EXPORTDA)'
+/*
+//OUTPUT   DD DSN=your.output.dataset,DISP=(NEW,CATLG),
+//            SPACE=(TRK,(1,1)),LRECL=80,RECFM=FB,
+//            UNIT=SYSDA
+```
+
+## REXX Code (EXPORTDA)
+
+```rexx
+/* REXX - Export SDSF DA Queue to Dataset */
+ADDRESS TSO
+
+/* Allocate and open SDSF */
+call SDSF "ISFEXEC ON"
+if rc ≠ 0 then do
+  say "SDSF initialization failed with RC:" rc
+  exit rc
+end
+
+/* Set SDSF options */
+call SDSF "ISFOWNER YOURUSERID" /* Replace with your userid */
+call SDSF "ISFPREFIX *"         /* All prefixes */
+call SDSF "ISFCOLS (JOBNAME JOBID OWNER STATUS)" /* Columns you want */
+
+/* Access the DA panel */
+call SDSF "DA"
+
+/* Check if successful */
+if rc ≠ 0 then do
+  say "DA command failed with RC:" rc
+  exit rc
+end
+
+/* Open output dataset */
+"EXECIO * DISKW OUTPUT (STEM DA_OUT. OPEN FINIS"
+
+/* Process the output */
+do i = 1 to DA_OUT.0
+  /* Write each line to the output dataset */
+  "EXECIO 1 DISKW OUTPUT (STEM DA_OUT."i".)"
+end
+
+/* Close SDSF */
+call SDSF "ISFEXEC OFF"
+
+exit 0
+```
+
+## Notes:
+
+1. You'll need to customize the JCL with your actual dataset names and job card information.
+
+2. The REXX code assumes you have SDSF REXX interface available (ISFEXEC).
+
+3. You may need to adjust the ISFCOLS list to include the columns you specifically want to export.
+
+4. The output format will depend on your SDSF installation and settings.
+
+5. You might need additional authorization to access SDSF data via REXX.
+
+6. For DeepSeek to help you debug or modify this code, you should:
+   - Provide any error messages you encounter
+   - Specify your exact requirements for the output
+   - Share details about your specific z/OS and SDSF environment
